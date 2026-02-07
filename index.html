@@ -312,135 +312,135 @@ PersistentKeepalive = 25`;
             // Display Output
             const outputDiv = document.getElementById('wgOutput');
             outputDiv.style.display = 'block';
-            outputDiv.innerHTML = \`<strong>Client Public Key (to add to pfSense):</strong><br>\${publicKey}<br><br><strong>Assigned IP:</strong> \${address}\`;
+            outputDiv.innerHTML = `<strong>Client Public Key (to add to pfSense):</strong><br>${publicKey}<br><br><strong>Assigned IP:</strong> ${address}`;
 
-        // Generate QR Code
-        const qrContainer = document.getElementById('qrcode');
-        qrContainer.innerHTML = "";
-        qrContainer.style.display = 'flex';
-        new QRCode(qrContainer, {
-            text: config,
-            width: 256,
-            height: 256
-        });
-
-        document.getElementById('downloadBtn').style.display = 'inline-block';
-    }
-
-    function downloadConfig() {
-        if (!generatedConfigText) return;
-        const blob = new Blob([generatedConfigText], { type: 'text/plain' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const clientName = document.getElementById('clientName').value || 'wg-client';
-        a.download = \`\${clientName}.conf\`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-    }
-
-    // --- OVH API Logic ---
-    async function ovhRequest(method, path, body = "") {
-        const ak = localStorage.getItem('ovh_ak');
-        const as = localStorage.getItem('ovh_as');
-        const ck = localStorage.getItem('ovh_ck');
-        
-        if (!ak || !as || !ck) {
-            alert("Veuillez configurer les clés API OVH.");
-            return;
-        }
-
-        const url = \`https://eu.api.ovh.com/1.0\${path}\`;
-        const timestamp = Math.round(Date.now() / 1000);
-        
-        // Signature: SHA1_HEX(AS + "+" + CK + "+" + METHOD + "+" + URL + "+" + BODY + "+" + TSTAMP)
-        const toSign = \`\${as}+\${ck}+\${method}+\${url}+\${body}+\${timestamp}\`;
-        const signature = "$1$" + CryptoJS.SHA1(toSign).toString(CryptoJS.enc.Hex);
-
-        const headers = {
-            'X-Ovh-Application': ak,
-            'X-Ovh-Consumer': ck,
-            'X-Ovh-Timestamp': timestamp,
-            'X-Ovh-Signature': signature,
-            'Content-Type': 'application/json'
-        };
-
-        try {
-            const response = await fetch(url, {
-                method: method,
-                headers: headers,
-                body: body || undefined
+            // Generate QR Code
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = "";
+            qrContainer.style.display = 'flex';
+            new QRCode(qrContainer, {
+                text: config,
+                width: 256,
+                height: 256
             });
-            
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(\`Erreur \${response.status}: \${errText}\`);
+
+            document.getElementById('downloadBtn').style.display = 'inline-block';
+        }
+
+        function downloadConfig() {
+            if (!generatedConfigText) return;
+            const blob = new Blob([generatedConfigText], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const clientName = document.getElementById('clientName').value || 'wg-client';
+            a.download = `${clientName}.conf`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        // --- OVH API Logic ---
+        async function ovhRequest(method, path, body = "") {
+            const ak = localStorage.getItem('ovh_ak');
+            const as = localStorage.getItem('ovh_as');
+            const ck = localStorage.getItem('ovh_ck');
+
+            if (!ak || !as || !ck) {
+                alert("Veuillez configurer les clés API OVH.");
+                return;
             }
-            
-            return await response.json();
-        } catch (error) {
-            console.error(error);
-            alert("Erreur API OVH: " + error.message);
-            return null;
+
+            const url = `https://eu.api.ovh.com/1.0${path}`;
+            const timestamp = Math.round(Date.now() / 1000);
+
+            // Signature: SHA1_HEX(AS + "+" + CK + "+" + METHOD + "+" + URL + "+" + BODY + "+" + TSTAMP)
+            const toSign = `${as}+${ck}+${method}+${url}+${body}+${timestamp}`;
+            const signature = "$1$" + CryptoJS.SHA1(toSign).toString(CryptoJS.enc.Hex);
+
+            const headers = {
+                'X-Ovh-Application': ak,
+                'X-Ovh-Consumer': ck,
+                'X-Ovh-Timestamp': timestamp,
+                'X-Ovh-Signature': signature,
+                'Content-Type': 'application/json'
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: headers,
+                    body: body || undefined
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Erreur ${response.status}: ${errText}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error(error);
+                alert("Erreur API OVH: " + error.message);
+                return null;
+            }
         }
-    }
 
-    async function controlInstance(action) {
-        const serviceName = localStorage.getItem('ovh_sn');
-        const instanceId = localStorage.getItem('ovh_id');
+        async function controlInstance(action) {
+            const serviceName = localStorage.getItem('ovh_sn');
+            const instanceId = localStorage.getItem('ovh_id');
 
-        if (!serviceName || !instanceId) {
-            alert("Veuillez configurer le Service Name et l'Instance ID.");
-            return;
+            if (!serviceName || !instanceId) {
+                alert("Veuillez configurer le Service Name et l'Instance ID.");
+                return;
+            }
+
+            // Action is 'start' or 'stop'
+            // Type needs to connection to real API structure. 
+            // OVH Action: POST /cloud/project/{serviceName}/instance/{instanceId}/reboot | start | stop etc.
+            // Confirm hard stop? 
+            // Simple implementation:
+
+            const path = `/cloud/project/${serviceName}/instance/${instanceId}/${action}`;
+
+            const result = await ovhRequest('POST', path, "");
+            if (result) {
+                alert(`Action '${action}' envoyée avec succès.`);
+                checkStatus(); // Refresh status after action
+            }
         }
 
-        // Action is 'start' or 'stop'
-        // Type needs to connection to real API structure. 
-        // OVH Action: POST /cloud/project/{serviceName}/instance/{instanceId}/reboot | start | stop etc.
-        // Confirm hard stop? 
-        // Simple implementation:
-        
-        const path = \`/cloud/project/\${serviceName}/instance/\${instanceId}/\${action}\`;
-        
-        const result = await ovhRequest('POST', path, "");
-        if (result) {
-            alert(\`Action '\${action}' envoyée avec succès.\`);
-            checkStatus(); // Refresh status after action
+        async function checkStatus() {
+            const serviceName = localStorage.getItem('ovh_sn');
+            const instanceId = localStorage.getItem('ovh_id');
+
+            if (!serviceName || !instanceId) return;
+
+            const path = `/cloud/project/${serviceName}/instance/${instanceId}`;
+            const statusEl = document.getElementById('ovhStatus');
+            statusEl.innerText = "Checking...";
+
+            const data = await ovhRequest('GET', path);
+            if (data && data.status) {
+                let color = "#8b949e";
+                if (data.status === 'ACTIVE') color = "var(--success-color)";
+                if (data.status === 'SHUTOFF' || data.status === 'STOPPED') color = "var(--danger-color)";
+
+                statusEl.innerHTML = `Statut: <strong style="color:${color}">${data.status}</strong>`;
+            } else {
+                statusEl.innerText = "Statut: Erreur / Inconnu";
+            }
         }
-    }
 
-    async function checkStatus() {
-        const serviceName = localStorage.getItem('ovh_sn');
-        const instanceId = localStorage.getItem('ovh_id');
-
-        if (!serviceName || !instanceId) return;
-
-        const path = \`/cloud/project/\${serviceName}/instance/\${instanceId}\`;
-        const statusEl = document.getElementById('ovhStatus');
-        statusEl.innerText = "Checking...";
-
-        const data = await ovhRequest('GET', path);
-        if (data && data.status) {
-            let color = "#8b949e";
-            if (data.status === 'ACTIVE') color = "var(--success-color)";
-            if (data.status === 'SHUTOFF' || data.status === 'STOPPED') color = "var(--danger-color)";
-            
-            statusEl.innerHTML = \`Statut: <strong style="color:\${color}">\${data.status}</strong>\`;
-        } else {
-            statusEl.innerText = "Statut: Erreur / Inconnu";
-        }
-    }
-
-    // --- Init ---
-    window.addEventListener('load', () => {
-        loadConfig();
-        // Register Service Worker
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js')
-                .then(reg => console.log('SW Registered'))
-                .catch(err => console.log('SW Error', err));
-        }
-    });
+        // --- Init ---
+        window.addEventListener('load', () => {
+            loadConfig();
+            // Register Service Worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('SW Registered'))
+                    .catch(err => console.log('SW Error', err));
+            }
+        });
 
     </script>
 </body>
