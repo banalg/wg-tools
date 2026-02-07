@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WireGuard & OVH Manager</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d1117">
+
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-color: #58a6ff;
+            --success-color: #238636;
+            --danger-color: #da3633;
+            --border-color: #30363d;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1,
+        h2 {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+            font-size: 0.9em;
+        }
+
+        input {
+            width: 100%;
+            padding: 8px 12px;
+            margin-bottom: 15px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            box-sizing: border-box;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        button {
+            cursor: pointer;
+            padding: 10px 16px;
+            border-radius: 6px;
+            border: 1px solid rgba(27, 31, 35, 0.15);
+            font-weight: 600;
+            transition: 0.2s;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: #ffffff;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+
+        .btn-success {
+            background-color: var(--success-color);
+            color: #ffffff;
+            border: none;
+        }
+
+        .btn-success:hover {
+            opacity: 0.9;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: #ffffff;
+            border: none;
+        }
+
+        .btn-danger:hover {
+            opacity: 0.9;
+        }
+
+        .status-output {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #000;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            display: none;
+        }
+
+        #qrcode {
+            background: white;
+            padding: 10px;
+            margin-top: 15px;
+            display: none;
+            justify-content: center;
+            border-radius: 4px;
+        }
+
+        .config-toggle {
+            cursor: pointer;
+            color: var(--accent-color);
+            font-size: 0.9em;
+            text-decoration: underline;
+        }
+
+        #configSection {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>WireGuard & OVH Manager</h1>
+
+        <!-- OVH Control Panel -->
+        <div class="card">
+            <h2>OVH Utils</h2>
+            <div id="ovhStatus" class="status-output" style="display:block; margin-bottom:10px; color: #8b949e;">Status:
+                Unknown</div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-success" onclick="controlInstance('start')">Démarrer</button>
+                <button class="btn-danger" onclick="controlInstance('stop')">Arrêter</button>
+            </div>
+            <button onclick="checkStatus()"
+                style="background-color: #21262d; color: var(--text-primary); border: 1px solid var(--border-color); margin-top: 0;">Rafraîchir
+                Statut</button>
+        </div>
+
+        <!-- WireGuard Generator -->
+        <div class="card">
+            <h2>Générateur WireGuard</h2>
+            <label for="clientName">Nom du client (optionnel)</label>
+            <input type="text" id="clientName" placeholder="ex: mon-telephone">
+
+            <button class="btn-primary" onclick="generateConfig()">Générer QR & Config</button>
+            <button id="downloadBtn" onclick="downloadConfig()"
+                style="display:none; background-color: #21262d; color: var(--text-primary); border: 1px solid var(--border-color);">Télécharger
+                .conf</button>
+
+            <div id="qrcode"></div>
+            <div id="wgOutput" class="status-output"></div>
+        </div>
+
+        <!-- Configuration Section -->
+        <div style="text-align: center; margin-bottom: 20px;">
+            <span class="config-toggle" onclick="toggleConfig()">Afficher/Masquer Configuration</span>
+        </div>
+
+        <div class="card" id="configSection">
+            <h2>Configuration Secrets</h2>
+            <p style="font-size: 0.8em; color: var(--danger-color);">Ces données sont stockées uniquement dans votre
+                navigateur.</p>
+
+            <label>OVH Application Key</label>
+            <input type="password" id="ak">
+
+            <label>OVH Application Secret</label>
+            <input type="password" id="as">
+
+            <label>OVH Consumer Key</label>
+            <input type="password" id="ck">
+
+            <label>OVH Service Name (Project ID)</label>
+            <input type="text" id="serviceName" value="">
+
+            <label>OVH Instance ID</label>
+            <input type="text" id="instanceId">
+
+            <h3 style="border-bottom: 1px solid var(--border-color); padding-bottom: 5px; margin-top: 20px;">WireGuard
+                Settings</h3>
+
+            <label>WireGuard Server Public Key</label>
+            <input type="text" id="wgPubKey">
+
+            <label>WireGuard Endpoint (e.g. vpn.example.com:51820)</label>
+            <input type="text" id="wgEndpoint">
+
+            <label>WireGuard DNS (e.g. 1.1.1.1)</label>
+            <input type="text" id="wgDns">
+
+            <label>WireGuard Address Base (e.g. 10.0.160.)</label>
+            <input type="text" id="wgAddressBase">
+
+            <button class="btn-primary" onclick="saveConfig()">Sauvegarder</button>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Configuration Constants ---
+        // --- Configuration Constants ---
+        // Removed hardcoded constants. Now using user configuration.
+
+        // --- State & Config ---
+        let generatedConfigText = "";
+
+        function toggleConfig() {
+            const el = document.getElementById('configSection');
+            el.style.display = el.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function loadConfig() {
+            document.getElementById('ak').value = localStorage.getItem('ovh_ak') || '';
+            document.getElementById('as').value = localStorage.getItem('ovh_as') || '';
+            document.getElementById('ck').value = localStorage.getItem('ovh_ck') || '';
+            document.getElementById('serviceName').value = localStorage.getItem('ovh_sn') || '';
+            document.getElementById('instanceId').value = localStorage.getItem('ovh_id') || '';
+
+            document.getElementById('wgPubKey').value = localStorage.getItem('wg_pubkey') || '';
+            document.getElementById('wgEndpoint').value = localStorage.getItem('wg_endpoint') || '';
+            document.getElementById('wgDns').value = localStorage.getItem('wg_dns') || '1.1.1.1';
+            document.getElementById('wgAddressBase').value = localStorage.getItem('wg_address_base') || '10.0.0.';
+        }
+
+        function saveConfig() {
+            localStorage.setItem('ovh_ak', document.getElementById('ak').value);
+            localStorage.setItem('ovh_as', document.getElementById('as').value);
+            localStorage.setItem('ovh_ck', document.getElementById('ck').value);
+            localStorage.setItem('ovh_sn', document.getElementById('serviceName').value);
+            localStorage.setItem('ovh_id', document.getElementById('instanceId').value);
+
+            localStorage.setItem('wg_pubkey', document.getElementById('wgPubKey').value);
+            localStorage.setItem('wg_endpoint', document.getElementById('wgEndpoint').value);
+            localStorage.setItem('wg_dns', document.getElementById('wgDns').value);
+            localStorage.setItem('wg_address_base', document.getElementById('wgAddressBase').value);
+
+            alert('Configuration sauvegardée !');
+        }
+
+        // --- WireGuard Logic ---
+        function generateConfig() {
+            const wgPubKey = document.getElementById('wgPubKey').value;
+            const wgEndpoint = document.getElementById('wgEndpoint').value;
+            const wgDns = document.getElementById('wgDns').value;
+            const wgAddressBase = document.getElementById('wgAddressBase').value;
+
+            if (!wgPubKey || !wgEndpoint || !wgAddressBase) {
+                alert("Veuillez configurer les paramètres WireGuard dans la section Configuration.");
+                return;
+            }
+
+            const keyPair = nacl.box.keyPair();
+            const privateKey = nacl.util.encodeBase64(keyPair.secretKey);
+            const publicKey = nacl.util.encodeBase64(keyPair.publicKey);
+
+            // Random IP generation for potential uniqueness
+            const randomLastOctet = Math.floor(Math.random() * (250 - 2 + 1)) + 2;
+            const address = `${wgAddressBase}${randomLastOctet}/24`;
+
+            const config = `[Interface]
+PrivateKey = ${privateKey}
+Address = ${address}
+DNS = ${wgDns}
+MTU = 1280
+
+[Peer]
+PublicKey = ${wgPubKey}
+Endpoint = ${wgEndpoint}
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25`;
+
+            generatedConfigText = config;
+
+            // Display Output
+            const outputDiv = document.getElementById('wgOutput');
+            outputDiv.style.display = 'block';
+            outputDiv.innerHTML = \`<strong>Client Public Key (to add to pfSense):</strong><br>\${publicKey}<br><br><strong>Assigned IP:</strong> \${address}\`;
+
+        // Generate QR Code
+        const qrContainer = document.getElementById('qrcode');
+        qrContainer.innerHTML = "";
+        qrContainer.style.display = 'flex';
+        new QRCode(qrContainer, {
+            text: config,
+            width: 256,
+            height: 256
+        });
+
+        document.getElementById('downloadBtn').style.display = 'inline-block';
+    }
+
+    function downloadConfig() {
+        if (!generatedConfigText) return;
+        const blob = new Blob([generatedConfigText], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const clientName = document.getElementById('clientName').value || 'wg-client';
+        a.download = \`\${clientName}.conf\`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+
+    // --- OVH API Logic ---
+    async function ovhRequest(method, path, body = "") {
+        const ak = localStorage.getItem('ovh_ak');
+        const as = localStorage.getItem('ovh_as');
+        const ck = localStorage.getItem('ovh_ck');
+        
+        if (!ak || !as || !ck) {
+            alert("Veuillez configurer les clés API OVH.");
+            return;
+        }
+
+        const url = \`https://eu.api.ovh.com/1.0\${path}\`;
+        const timestamp = Math.round(Date.now() / 1000);
+        
+        // Signature: SHA1_HEX(AS + "+" + CK + "+" + METHOD + "+" + URL + "+" + BODY + "+" + TSTAMP)
+        const toSign = \`\${as}+\${ck}+\${method}+\${url}+\${body}+\${timestamp}\`;
+        const signature = "$1$" + CryptoJS.SHA1(toSign).toString(CryptoJS.enc.Hex);
+
+        const headers = {
+            'X-Ovh-Application': ak,
+            'X-Ovh-Consumer': ck,
+            'X-Ovh-Timestamp': timestamp,
+            'X-Ovh-Signature': signature,
+            'Content-Type': 'application/json'
+        };
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: headers,
+                body: body || undefined
+            });
+            
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(\`Erreur \${response.status}: \${errText}\`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error(error);
+            alert("Erreur API OVH: " + error.message);
+            return null;
+        }
+    }
+
+    async function controlInstance(action) {
+        const serviceName = localStorage.getItem('ovh_sn');
+        const instanceId = localStorage.getItem('ovh_id');
+
+        if (!serviceName || !instanceId) {
+            alert("Veuillez configurer le Service Name et l'Instance ID.");
+            return;
+        }
+
+        // Action is 'start' or 'stop'
+        // Type needs to connection to real API structure. 
+        // OVH Action: POST /cloud/project/{serviceName}/instance/{instanceId}/reboot | start | stop etc.
+        // Confirm hard stop? 
+        // Simple implementation:
+        
+        const path = \`/cloud/project/\${serviceName}/instance/\${instanceId}/\${action}\`;
+        
+        const result = await ovhRequest('POST', path, "");
+        if (result) {
+            alert(\`Action '\${action}' envoyée avec succès.\`);
+            checkStatus(); // Refresh status after action
+        }
+    }
+
+    async function checkStatus() {
+        const serviceName = localStorage.getItem('ovh_sn');
+        const instanceId = localStorage.getItem('ovh_id');
+
+        if (!serviceName || !instanceId) return;
+
+        const path = \`/cloud/project/\${serviceName}/instance/\${instanceId}\`;
+        const statusEl = document.getElementById('ovhStatus');
+        statusEl.innerText = "Checking...";
+
+        const data = await ovhRequest('GET', path);
+        if (data && data.status) {
+            let color = "#8b949e";
+            if (data.status === 'ACTIVE') color = "var(--success-color)";
+            if (data.status === 'SHUTOFF' || data.status === 'STOPPED') color = "var(--danger-color)";
+            
+            statusEl.innerHTML = \`Statut: <strong style="color:\${color}">\${data.status}</strong>\`;
+        } else {
+            statusEl.innerText = "Statut: Erreur / Inconnu";
+        }
+    }
+
+    // --- Init ---
+    window.addEventListener('load', () => {
+        loadConfig();
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('SW Registered'))
+                .catch(err => console.log('SW Error', err));
+        }
+    });
+
+    </script>
+</body>
+
+</html>

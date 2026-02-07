@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-workspace
+
+# Node (if used in future)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Logs
+*.log
