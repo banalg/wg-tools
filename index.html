@@ -152,6 +152,15 @@
         #configSection {
             display: none;
         }
+
+        #shareQrCode {
+            margin-top: 15px;
+            display: none;
+            justify-content: center;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+        }
     </style>
 </head>
 
@@ -166,8 +175,8 @@
             <div id="ovhStatus" class="status-output" style="display:block; margin-bottom:10px; color: #8b949e;">Status:
                 Unknown</div>
             <div style="display: flex; gap: 10px;">
-                <button class="btn-success" onclick="controlInstance('start')">Démarrer</button>
-                <button class="btn-danger" onclick="controlInstance('stop')">Arrêter</button>
+                <button class="btn-success" onclick="controlInstance('unshelve')">Démarrer (Unshelve)</button>
+                <button class="btn-danger" onclick="controlInstance('shelve')">Arrêter (Shelve)</button>
             </div>
             <button onclick="checkStatus()"
                 style="background-color: #21262d; color: var(--text-primary); border: 1px solid var(--border-color); margin-top: 0;">Rafraîchir
@@ -229,7 +238,14 @@
             <label>WireGuard Address Base (e.g. 10.0.160.)</label>
             <input type="text" id="wgAddressBase">
 
-            <button class="btn-primary" onclick="saveConfig()">Sauvegarder</button>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button class="btn-primary" onclick="saveConfig()">Sauvegarder</button>
+                <button
+                    style="background-color: #21262d; color: var(--text-primary); border: 1px solid var(--border-color);"
+                    onclick="exportConfig()">Partager Configuration</button>
+            </div>
+
+            <div id="shareQrCode"></div>
         </div>
 
     </div>
@@ -248,6 +264,11 @@
         }
 
         function loadConfig() {
+            // Check for config in URL hash
+            if (window.location.hash.startsWith('#setup=')) {
+                importConfigFromHash();
+            }
+
             document.getElementById('ak').value = localStorage.getItem('ovh_ak') || '';
             document.getElementById('as').value = localStorage.getItem('ovh_as') || '';
             document.getElementById('ck').value = localStorage.getItem('ovh_ck') || '';
@@ -273,6 +294,62 @@
             localStorage.setItem('wg_address_base', document.getElementById('wgAddressBase').value);
 
             alert('Configuration sauvegardée !');
+        }
+
+        function exportConfig() {
+            const config = {
+                ak: document.getElementById('ak').value,
+                as: document.getElementById('as').value,
+                ck: document.getElementById('ck').value,
+                sn: document.getElementById('serviceName').value,
+                id: document.getElementById('instanceId').value,
+                wpk: document.getElementById('wgPubKey').value,
+                wep: document.getElementById('wgEndpoint').value,
+                wdn: document.getElementById('wgDns').value,
+                wab: document.getElementById('wgAddressBase').value
+            };
+
+            const jsonStr = JSON.stringify(config);
+            const base64 = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(jsonStr));
+            const url = `${window.location.origin}${window.location.pathname}#setup=${base64}`;
+
+            const qrContainer = document.getElementById('shareQrCode');
+            qrContainer.innerHTML = "";
+            qrContainer.style.display = 'flex';
+            new QRCode(qrContainer, {
+                text: url,
+                width: 256,
+                height: 256
+            });
+
+            alert("Scannez ce QR Code avec votre téléphone pour importer la configuration.");
+        }
+
+        function importConfigFromHash() {
+            try {
+                const hash = window.location.hash.substring(7); // Remove #setup=
+                const jsonStr = CryptoJS.enc.Utf8.stringify(CryptoJS.enc.Base64.parse(hash));
+                const config = JSON.parse(jsonStr);
+
+                if (confirm("Voulez-vous importer la configuration détectée dans l'URL ?")) {
+                    localStorage.setItem('ovh_ak', config.ak || '');
+                    localStorage.setItem('ovh_as', config.as || '');
+                    localStorage.setItem('ovh_ck', config.ck || '');
+                    localStorage.setItem('ovh_sn', config.sn || '');
+                    localStorage.setItem('ovh_id', config.id || '');
+                    localStorage.setItem('wg_pubkey', config.wpk || '');
+                    localStorage.setItem('wg_endpoint', config.wep || '');
+                    localStorage.setItem('wg_dns', config.wdn || '');
+                    localStorage.setItem('wg_address_base', config.wab || '');
+
+                    // Clean URL
+                    history.replaceState(null, null, window.location.pathname);
+                    alert("Configuration importée avec succès !");
+                }
+            } catch (e) {
+                console.error("Import failed", e);
+                alert("Échec de l'importation de la configuration.");
+            }
         }
 
         // --- WireGuard Logic ---
@@ -394,11 +471,9 @@ PersistentKeepalive = 25`;
                 return;
             }
 
-            // Action is 'start' or 'stop'
+            // Action is 'unshelve' or 'shelve'
             // Type needs to connection to real API structure. 
-            // OVH Action: POST /cloud/project/{serviceName}/instance/{instanceId}/reboot | start | stop etc.
-            // Confirm hard stop? 
-            // Simple implementation:
+            // OVH Action: POST /cloud/project/{serviceName}/instance/{instanceId}/unshelve | shelve
 
             const path = `/cloud/project/${serviceName}/instance/${instanceId}/${action}`;
 
@@ -424,12 +499,14 @@ PersistentKeepalive = 25`;
                 let color = "#8b949e";
                 if (data.status === 'ACTIVE') color = "var(--success-color)";
                 if (data.status === 'SHUTOFF' || data.status === 'STOPPED') color = "var(--danger-color)";
+                if (data.status === 'SHELVED' || data.status === 'SHELVED_OFFLOADED') color = "#d29922"; // Orange
 
                 statusEl.innerHTML = `Statut: <strong style="color:${color}">${data.status}</strong>`;
             } else {
                 statusEl.innerText = "Statut: Erreur / Inconnu";
             }
         }
+
 
         // --- Init ---
         window.addEventListener('load', () => {
