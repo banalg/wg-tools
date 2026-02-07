@@ -354,13 +354,25 @@
 
         // --- WireGuard Logic ---
         function generateConfig() {
-            const wgPubKey = document.getElementById('wgPubKey').value;
-            const wgEndpoint = document.getElementById('wgEndpoint').value;
-            const wgDns = document.getElementById('wgDns').value;
-            const wgAddressBase = document.getElementById('wgAddressBase').value;
+            const wgPubKey = document.getElementById('wgPubKey').value.trim();
+            const wgEndpoint = document.getElementById('wgEndpoint').value.trim();
+            const wgDns = document.getElementById('wgDns').value.trim();
+            const wgAddressBase = document.getElementById('wgAddressBase').value.trim();
 
             if (!wgPubKey || !wgEndpoint || !wgAddressBase) {
                 alert("Veuillez configurer les paramètres WireGuard dans la section Configuration.");
+                return;
+            }
+
+            // Basic validation for Endpoint format (host:port)
+            if (!wgEndpoint.includes(':')) {
+                alert("Attention : L'Endpoint WireGuard doit impérativement être au format 'host:port' (ex: vpn.exemple.com:51820).");
+                return;
+            }
+
+            // Validate DNS (no spaces allowed)
+            if (wgDns.includes(' ')) {
+                alert("Attention : Les serveurs DNS doivent être séparés par des virgules sans espaces (ex: 1.1.1.1,8.8.8.8).");
                 return;
             }
 
